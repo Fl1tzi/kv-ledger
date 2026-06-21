@@ -27,6 +27,8 @@ sequenceDiagram
     loop each decode step
         E->>L: append_token(seq)
         L-->>E: Some(new BlockId) / None
+        E->>L: write_head(seq)
+        L-->>E: (BlockId, slot)
     end
 
     E->>L: block_table(seq)

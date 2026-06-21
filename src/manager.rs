@@ -158,6 +158,20 @@ impl BlockManager {
         self.seqs.get(&seq).map(|s| s.length)
     }
 
+    /// The block and slot offset where the last token of this sequence should
+    /// be written.
+    ///
+    /// Call this after [`append_token`](Self::append_token) to find the write
+    /// target: `slab_base + block_id * block_byte_size + slot * token_byte_size`.
+    ///
+    /// Returns `None` if the sequence is unknown or has no tokens yet.
+    pub fn write_head(&self, seq: SeqId) -> Option<(BlockId, usize)> {
+        let s = self.seqs.get(&seq)?;
+        let block = *s.blocks.last()?;
+        let slot = (s.length - 1) % self.block_size;
+        Some((block, slot))
+    }
+
     /// The number of free blocks.
     pub fn num_free(&self) -> usize {
         self.free.len()
@@ -295,6 +309,36 @@ mod tests {
         assert_eq!(m.num_free(), 1);
         assert!(m.allocate(SeqId(3), 1).is_ok());
         assert_eq!(m.num_free(), 0);
+    }
+
+    #[test]
+    fn write_head_tracks_slot_and_block() {
+        let mut m = mgr(8, 4);
+        // Empty sequence
+        m.allocate(SeqId(1), 0).unwrap();
+        assert_eq!(m.write_head(SeqId(1)), None);
+
+        // 5 tokens: block 0 holds tokens 0-3 (full), block 1 holds token 4.
+        // The last token (index 4) is the first slot of block 1: (5-1) % 4 = 0.
+        m.allocate(SeqId(2), 5).unwrap();
+        let (block, slot) = m.write_head(SeqId(2)).unwrap();
+        assert_eq!(block.0, 1);
+        assert_eq!(slot, 0);
+
+        // Append 3 more tokens (in block 1)
+        for expected_slot in [1, 2, 3] {
+            m.append_token(SeqId(2)).unwrap();
+            let (b, s) = m.write_head(SeqId(2)).unwrap();
+            assert_eq!(b.0, 1);
+            assert_eq!(s, expected_slot);
+        }
+
+        // One more append crosses the boundary: a new block is allocated.
+        let new = m.append_token(SeqId(2)).unwrap();
+        assert!(new.is_some());
+        let (b, s) = m.write_head(SeqId(2)).unwrap();
+        assert_eq!(b, new.unwrap()); // head moved to the new block
+        assert_eq!(s, 0); // first slot in that block
     }
 
     #[test]
