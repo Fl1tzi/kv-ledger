@@ -1,9 +1,4 @@
 //! Orchestrates the free pool and the block table of each sequence.
-//!
-//! This is the actual bookkeeping.
-//! Admit a new sequence (therefore reserving physical blocks) and extend
-//! it by new tokens. At each block boundary a new block is allocated.
-//! The block is freed back to the pool once it is not needed anymore.
 
 use alloc::vec::Vec;
 
